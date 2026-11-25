@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Sync Runs — ScholarLedger{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Sync Run History</h1>
+    <div class="flex gap-1">
+        <form method="post" action="/sync/run" style="display:inline;">
+            <input type="hidden" name="source" value="openalex">
+            <button type="submit" class="btn btn-primary">Sync OpenAlex</button>
+        </form>
+        <form method="post" action="/sync/run" style="display:inline;">
+            <input type="hidden" name="source" value="orcid">
+            <button type="submit" class="btn">Sync ORCID</button>
+        </form>
+        <form method="post" action="/sync/run" style="display:inline;">
+            <input type="hidden" name="source" value="crossref">
+            <button type="submit" class="btn">Sync Crossref</button>
+        </form>
+        <form method="post" action="/sync/run" style="display:inline;">
+            <input type="hidden" name="source" value="all">
+            <button type="submit" class="btn btn-success">Sync All</button>
+        </form>
+    </div>
+</div>
+
+{% if runs %}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Source</th>
+            <th>Started</th>
+            <th>Finished</th>
+            <th>Status</th>
+            <th>Fetched</th>
+            <th>Merged</th>
+            <th>Queued</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for run in runs %}
+        <tr>
+            <td>{{ run.id }}</td>
+            <td>{{ run.source }}</td>
+            <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}</td>
+            <td>{{ run.finished_at.strftime('%Y-%m-%d %H:%M') if run.finished_at else '—' }}</td>
+            <td><span class="badge badge-{{ 'verified' if run.status.value == 'success' else 'rejected' if run.status.value == 'failed' else 'draft' }}">{{ run.status.value }}</span></td>
+            <td>{{ run.records_fetched }}</td>
+            <td>{{ run.records_merged }}</td>
+            <td>{{ run.records_queued }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card text-center">
+    <p class="text-muted">No sync runs recorded yet.</p>
+</div>
+{% endif %}
+{% endblock %}

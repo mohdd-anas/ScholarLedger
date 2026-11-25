@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ publication.title[:60] }} — ScholarLedger{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Publication Details</h1>
+    <div class="flex gap-1">
+        <a href="/publications" class="btn">← Back</a>
+        <a href="/publications/{{ publication.id }}/edit" class="btn">Edit</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="flex justify-between items-center mb-2">
+        <span class="badge badge-{{ publication.status.value }}">{{ publication.status.value|upper }}</span>
+        <span class="text-muted">Source: {{ publication.source.value }}</span>
+    </div>
+
+    <h2 style="margin-bottom:1rem;">{{ publication.title }}</h2>
+
+    <table>
+        <tr><th style="width:150px;">Authors</th><td>{{ publication.authors }}</td></tr>
+        <tr><th>Venue</th><td>{{ publication.venue or '—' }}</td></tr>
+        <tr><th>Year</th><td>{{ publication.year or '—' }}</td></tr>
+        <tr><th>DOI</th><td>{% if publication.doi %}<a href="https://doi.org/{{ publication.doi }}" target="_blank">{{ publication.doi }}</a>{% else %}—{% endif %}</td></tr>
+        <tr><th>Type</th><td>{{ publication.pub_type.value }}</td></tr>
+        <tr><th>Department</th><td>{{ publication.department or '—' }}</td></tr>
+        <tr><th>Owner</th><td>{{ owner.name }} ({{ owner.email }})</td></tr>
+        {% if publication.match_confidence is not none %}
+        <tr><th>Match Confidence</th><td>{{ "%.1f"|format(publication.match_confidence * 100) }}%</td></tr>
+        {% endif %}
+    </table>
+
+    {% if publication.status.value == 'draft' and (user.id == publication.owner_faculty_id or user.role.value == 'admin') %}
+    <div class="mt-2">
+        <form method="post" action="/publications/{{ publication.id }}/submit" style="display:inline;">
+            <button type="submit" class="btn btn-primary">Submit for Verification</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if user.role.value == 'admin' and publication.status.value == 'submitted' %}
+    <div class="mt-2 flex gap-1">
+        <form method="post" action="/review/{{ publication.id }}/verify" style="display:inline;">
+            <button type="submit" class="btn btn-success">✓ Verify</button>
+        </form>
+        <form method="post" action="/review/{{ publication.id }}/reject" style="display:inline;">
+            <button type="submit" class="btn btn-danger">✗ Reject</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

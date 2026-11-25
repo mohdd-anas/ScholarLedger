@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — ScholarLedger{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+</div>
+<div class="flex gap-2" style="flex-wrap:wrap;">
+    <div class="card" style="flex:1; min-width:200px;">
+        <h3 class="text-muted" style="font-size:0.875rem; text-transform:uppercase;">Welcome</h3>
+        <p style="font-size:1.5rem; font-weight:700;">{{ user.name }}</p>
+        <p class="text-muted">{{ user.department }} · {{ user.role.value|title }}</p>
+        {% if user.orcid_id %}
+        <p class="text-muted mt-1">ORCID: {{ user.orcid_id }}</p>
+        {% endif %}
+    </div>
+    <div class="card" style="flex:1; min-width:200px;">
+        <h3 class="text-muted" style="font-size:0.875rem; text-transform:uppercase;">Quick Actions</h3>
+        <div class="mt-1 flex gap-1" style="flex-wrap:wrap;">
+            <a href="/publications" class="btn btn-primary">My Publications</a>
+            <a href="/publications/new" class="btn">Add Publication</a>
+            {% if user.role.value == 'admin' %}
+            <a href="/review" class="btn btn-warning">Review Queue</a>
+            {% endif %}
+            <a href="/reports" class="btn">Reports</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

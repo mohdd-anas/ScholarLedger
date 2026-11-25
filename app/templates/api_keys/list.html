@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}API Keys — ScholarLedger{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>API Keys</h1>
+</div>
+
+{% if new_key %}
+<div class="alert alert-info">
+    <strong>Your new API key (shown once):</strong><br>
+    <code style="font-size:1rem; user-select:all;">{{ new_key }}</code><br>
+    <small>Use header: <code>X-API-Key: {{ new_key }}</code></small>
+</div>
+{% endif %}
+
+<div class="card mb-2" style="max-width:600px;">
+    <h2 class="card-title">Create New API Key</h2>
+    <form method="post" action="/api-keys/create" class="flex gap-1 items-center">
+        <input type="text" name="name" required placeholder="e.g. IQAC Report Script"
+               style="flex:1; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius);">
+        <button type="submit" class="btn btn-primary">Generate Key</button>
+    </form>
+</div>
+
+{% if keys %}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Prefix</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Last Used</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for k in keys %}
+        <tr>
+            <td>{{ k.name }}</td>
+            <td><code>{{ k.key_prefix }}...</code></td>
+            <td>
+                {% if k.is_active %}
+                <span class="badge badge-verified">active</span>
+                {% else %}
+                <span class="badge badge-rejected">revoked</span>
+                {% endif %}
+            </td>
+            <td>{{ k.created_at.strftime('%Y-%m-%d %H:%M') if k.created_at else '—' }}</td>
+            <td>{{ k.last_used_at.strftime('%Y-%m-%d %H:%M') if k.last_used_at else 'Never' }}</td>
+            <td>
+                {% if k.is_active %}
+                <form method="post" action="/api-keys/{{ k.id }}/revoke" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
+                </form>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card text-center">
+    <p class="text-muted">No API keys created yet.</p>
+</div>
+{% endif %}
+{% endblock %}

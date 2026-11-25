@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Reports — ScholarLedger{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Publication Reports</h1>
+    <a href="/reports/export/csv?department={{ department }}&year={{ year }}" class="btn btn-primary">📥 Export CSV</a>
+</div>
+
+<!-- Filters -->
+<div class="card mb-2">
+    <form method="get" action="/reports" class="flex gap-2 items-center" style="flex-wrap:wrap;">
+        <div class="form-group" style="margin-bottom:0;">
+            <select name="department">
+                <option value="">All Departments</option>
+                {% for dept in departments %}
+                <option value="{{ dept }}" {% if department == dept %}selected{% endif %}>{{ dept }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <select name="year">
+                <option value="">All Years</option>
+                {% for y in years %}
+                <option value="{{ y }}" {% if year|string == y|string %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Filter</button>
+    </form>
+</div>
+
+<!-- Summary Cards -->
+<div class="flex gap-2 mb-2" style="flex-wrap:wrap;">
+    <div class="card" style="flex:1; min-width:150px;">
+        <p class="text-muted" style="font-size:0.75rem; text-transform:uppercase;">Total Publications</p>
+        <p style="font-size:2rem; font-weight:700;">{{ total }}</p>
+    </div>
+    <div class="card" style="flex:1; min-width:150px;">
+        <p class="text-muted" style="font-size:0.75rem; text-transform:uppercase;">Verified</p>
+        <p style="font-size:2rem; font-weight:700; color:var(--success);">{{ by_status.get('verified', 0) }}</p>
+    </div>
+    <div class="card" style="flex:1; min-width:150px;">
+        <p class="text-muted" style="font-size:0.75rem; text-transform:uppercase;">Pending Review</p>
+        <p style="font-size:2rem; font-weight:700; color:var(--warning);">{{ by_status.get('submitted', 0) }}</p>
+    </div>
+    <div class="card" style="flex:1; min-width:150px;">
+        <p class="text-muted" style="font-size:0.75rem; text-transform:uppercase;">Sync Reliability</p>
+        <p style="font-size:2rem; font-weight:700;">{{ "%.0f"|format(sync_reliability) }}%</p>
+    </div>
+</div>
+
+<!-- By Department -->
+{% if by_department %}
+<div class="card mb-2">
+    <h2 class="card-title">By Department</h2>
+    <table>
+        <thead><tr><th>Department</th><th>Count</th></tr></thead>
+        <tbody>
+        {% for dept, count in by_department.items()|sort(attribute='1', reverse=true) %}
+            <tr><td>{{ dept }}</td><td>{{ count }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- By Year -->
+{% if by_year %}
+<div class="card mb-2">
+    <h2 class="card-title">By Year</h2>
+    <table>
+        <thead><tr><th>Year</th><th>Count</th></tr></thead>
+        <tbody>
+        {% for yr, count in by_year.items()|sort(reverse=true) %}
+            <tr><td>{{ yr }}</td><td>{{ count }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- By Type -->
+{% if by_type %}
+<div class="card mb-2">
+    <h2 class="card-title">By Type</h2>
+    <table>
+        <thead><tr><th>Type</th><th>Count</th></tr></thead>
+        <tbody>
+        {% for ptype, count in by_type.items()|sort(attribute='1', reverse=true) %}
+            <tr><td>{{ ptype|replace('-', ' ')|title }}</td><td>{{ count }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Source Coverage -->
+{% if source_coverage %}
+<div class="card mb-2">
+    <h2 class="card-title">Source Coverage</h2>
+    <table>
+        <thead><tr><th>Source</th><th>Count</th><th>Coverage</th></tr></thead>
+        <tbody>
+        {% for source, data in source_coverage.items() %}
+            <tr>
+                <td>{{ source }}</td>
+                <td>{{ data.count }}</td>
+                <td>{{ "%.1f"|format(data.percentage) }}%</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Recent Sync Runs -->
+{% if sync_runs %}
+<div class="card">
+    <h2 class="card-title">Recent Sync Runs</h2>
+    <table>
+        <thead><tr><th>Source</th><th>Started</th><th>Status</th><th>Fetched</th><th>Merged</th><th>Queued</th></tr></thead>
+        <tbody>
+        {% for run in sync_runs %}
+            <tr>
+                <td>{{ run.source }}</td>
+                <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}</td>
+                <td><span class="badge badge-{{ 'verified' if run.status.value == 'success' else 'draft' }}">{{ run.status.value }}</span></td>
+                <td>{{ run.records_fetched }}</td>
+                <td>{{ run.records_merged }}</td>
+                <td>{{ run.records_queued }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

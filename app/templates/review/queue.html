@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Review Queue — ScholarLedger{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Review Queue</h1>
+    <div class="flex gap-1">
+        <a href="/review?filter_status=submitted" class="btn {% if filter_status == 'submitted' %}btn-primary{% endif %}">Submitted</a>
+        <a href="/review?filter_status=all" class="btn {% if filter_status == 'all' %}btn-primary{% endif %}">All</a>
+    </div>
+</div>
+
+{% if pending_decisions %}
+<div class="card mb-2">
+    <h2 class="card-title">⚠️ Pending Match Decisions ({{ pending_decisions|length }})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Publication ID</th>
+                <th>Matched By</th>
+                <th>Score</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for decision in pending_decisions %}
+            <tr>
+                <td><a href="/publications/{{ decision.publication_id }}">#{{ decision.publication_id }}</a></td>
+                <td>{{ decision.matched_by.value }}</td>
+                <td>{{ "%.1f"|format(decision.score * 100) }}%</td>
+                <td>
+                    <div class="flex gap-1">
+                        <form method="post" action="/review/decision/{{ decision.id }}/accept" style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-success">Accept</button>
+                        </form>
+                        <form method="post" action="/review/decision/{{ decision.id }}/reject" style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<h2 class="mb-1">Publications for Review ({{ publications|length }})</h2>
+
+{% if publications %}
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Authors</th>
+            <th>Owner</th>
+            <th>Source</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for pub in publications %}
+        <tr>
+            <td><a href="/publications/{{ pub.id }}">{{ pub.title[:60] }}{% if pub.title|length > 60 %}...{% endif %}</a></td>
+            <td>{{ pub.authors[:30] }}{% if pub.authors|length > 30 %}...{% endif %}</td>
+            <td>{{ pub.owner.name if pub.owner else '—' }}</td>
+            <td>{{ pub.source.value }}</td>
+            <td><span class="badge badge-{{ pub.status.value }}">{{ pub.status.value }}</span></td>
+            <td>
+                <div class="flex gap-1">
+                    {% if pub.status.value == 'submitted' %}
+                    <form method="post" action="/review/{{ pub.id }}/verify" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-success">✓ Verify</button>
+                    </form>
+                    <form method="post" action="/review/{{ pub.id }}/reject" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-danger">✗ Reject</button>
+                    </form>
+                    {% endif %}
+                    <a href="/publications/{{ pub.id }}" class="btn btn-sm">View</a>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card text-center">
+    <p class="text-muted">No publications pending review. 🎉</p>
+</div>
+{% endif %}
+{% endblock %}

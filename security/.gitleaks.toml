@@ -1,0 +1,12 @@
+title = "ScholarLedger Gitleaks Configuration"
+
+[allowlist]
+description = "Known false positives — reviewed and accepted"
+paths = [
+    '''\.env\.example$''',
+    '''docs/DECISIONS\.md$''',
+    '''drills/''',
+    '''tests/''',
+    '''docker-compose.*\.yml$''',
+]
+

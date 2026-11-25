@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pb1
+      POSTGRES_USER: pb1
+      POSTGRES_PASSWORD: pb1secret
+    volumes:
+      - staging_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pb1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    image: ${APP_IMAGE:-pb1-app:latest}
+    container_name: pb1-app
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://pb1:pb1secret@db:5432/pb1
+      SECRET_KEY: ${SECRET_KEY:-staging-secret-change-in-production}
+      LOG_LEVEL: INFO
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8000/healthz'); r.raise_for_status()"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  staging_pgdata:

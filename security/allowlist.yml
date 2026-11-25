@@ -1,0 +1,13 @@
+# ScholarLedger Security Allowlist
+# Each entry documents an accepted false positive from security scans.
+# Format:
+#   - id: <unique-id>
+#     tool: <gitleaks|trivy|codeql|pip-audit>
+#     finding: <description>
+#     file: <path>
+#     reason: <why it is a false positive>
+#     reviewer: <who reviewed it>
+#     date: <YYYY-MM-DD>
+
+accepted_false_positives: []
+

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Import from OpenAlex — ScholarLedger{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Search &amp; Import from OpenAlex</h1>
+    <a href="/publications" class="btn">← Back</a>
+</div>
+
+{% if user.orcid_id %}
+<div class="card mb-2 flex justify-between items-center">
+    <div>
+        <strong>Your ORCID iD:</strong> <code>{{ user.orcid_id }}</code>
+        <p class="text-muted" style="margin:0;">Pull all publications linked to your ORCID from OpenAlex.</p>
+    </div>
+    <form method="post" action="/publications/openalex/sync-mine">
+        <button type="submit" class="btn btn-success">Sync My ORCID from OpenAlex</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="card mb-2">
+    <form method="get" action="/publications/openalex" class="flex gap-1 items-center" style="flex-wrap:wrap;">
+        <select name="search_type" style="padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius);">
+            <option value="title" {% if search_type == 'title' %}selected{% endif %}>Title / Keyword</option>
+            <option value="author" {% if search_type == 'author' %}selected{% endif %}>Author Name</option>
+            <option value="doi" {% if search_type == 'doi' %}selected{% endif %}>DOI</option>
+        </select>
+        <input type="text" name="q" value="{{ query }}" required
+               placeholder="Enter paper title, author name (e.g. Riya), or DOI..."
+               style="flex:1; min-width:220px; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius);">
+        <button type="submit" class="btn btn-primary">Search OpenAlex</button>
+    </form>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+{% if results %}
+<p class="text-muted mb-1">Found {{ results|length }} work(s) on OpenAlex</p>
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Authors</th>
+            <th>Year</th>
+            <th>Venue</th>
+            <th>DOI</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for w in results %}
+        <tr>
+            <td>{{ w.title[:80] }}{% if w.title|length > 80 %}...{% endif %}</td>
+            <td>{{ w.authors[:40] }}{% if w.authors|length > 40 %}...{% endif %}</td>
+            <td>{{ w.year or '—' }}</td>
+            <td>{{ w.venue[:30] if w.venue else '—' }}</td>
+            <td>{{ w.doi or '—' }}</td>
+            <td>
+                <form method="post" action="/publications/openalex/import" style="display:inline;">
+                    <input type="hidden" name="title" value="{{ w.title }}">
+                    <input type="hidden" name="authors" value="{{ w.authors }}">
+                    <input type="hidden" name="venue" value="{{ w.venue or '' }}">
+                    <input type="hidden" name="year" value="{{ w.year or '' }}">
+                    <input type="hidden" name="doi" value="{{ w.doi or '' }}">
+                    <input type="hidden" name="pub_type" value="{{ w.type }}">
+                    <button type="submit" class="btn btn-sm btn-primary">+ Import</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% elif query %}
+<div class="card text-center">
+    <p class="text-muted">No works found on OpenAlex for "{{ query }}".</p>
+</div>
+{% endif %}
+{% endblock %}

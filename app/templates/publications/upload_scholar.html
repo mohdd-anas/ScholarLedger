@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Upload Scholar Export — ScholarLedger{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Upload Google Scholar Export</h1>
+    <a href="/publications" class="btn">← Back</a>
+</div>
+
+<div class="card" style="max-width:650px;">
+    <p class="text-muted mb-2">
+        Upload a BibTeX (<code>.bib</code>) or CSV (<code>.csv</code>) file exported from your Google Scholar profile.
+        Records are normalized, deduplicated, and matched automatically.
+    </p>
+    <form method="post" action="/publications/upload-scholar" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="file">BibTeX or CSV File *</label>
+            <input type="file" id="file" name="file" accept=".bib,.csv" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Upload &amp; Import</button>
+    </form>
+</div>
+{% endblock %}
