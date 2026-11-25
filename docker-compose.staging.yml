@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: pb1
       POSTGRES_USER: pb1
-      POSTGRES_PASSWORD: pb1secret
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the staging environment}
     volumes:
       - staging_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,10 +17,10 @@ services:
     image: ${APP_IMAGE:-pb1-app:latest}
     container_name: pb1-app
     ports:
-      - "8000:8000"
+      - "${APP_PORT:-8000}:8000"
     environment:
-      DATABASE_URL: postgresql://pb1:pb1secret@db:5432/pb1
-      SECRET_KEY: ${SECRET_KEY:-staging-secret-change-in-production}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in the staging environment}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in the staging environment}
       LOG_LEVEL: INFO
     depends_on:
       db:
