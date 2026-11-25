@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: pb1
       POSTGRES_USER: pb1
-      POSTGRES_PASSWORD: pb1secret
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pb1secret}
     ports:
       - "5432:5432"
     volumes:
@@ -20,8 +20,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://pb1:pb1secret@db:5432/pb1
-      SECRET_KEY: dev-secret-key-change-in-production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://pb1:pb1secret@db:5432/pb1}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
       LOG_LEVEL: INFO
     depends_on:
       db:

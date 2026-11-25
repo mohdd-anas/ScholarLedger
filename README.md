@@ -113,6 +113,12 @@ See `.github/workflows/ci.yml` for the full pipeline:
 8. **Promotion** (manual approval → production)
 9. **Rollback** (automatic on health-check failure)
 
+### GitHub setup required
+
+Before enabling deployments, configure GitHub Environments named `staging` and `production`. Protect `production` with required reviewers and restrict it to `main`. Add environment secrets `STAGING_SECRET_KEY`, `STAGING_DATABASE_URL`, `PRODUCTION_SECRET_KEY`, and `PRODUCTION_DATABASE_URL`; add environment variables `STAGING_URL` and `PRODUCTION_URL` (reachable by the self-hosted runner). Use a dedicated self-hosted runner for deployments with Docker Compose and `cosign` installed. Keep the runner restricted to this repository because deployment workflows execute repository code. `GITHUB_TOKEN` needs package read/write access for GHCR.
+
+The CI workflow runs secret scan, lint/tests, CodeQL, and pip-audit on pull requests. Image publication and deployment run for branch pushes only, so untrusted pull requests do not receive package or OIDC write permissions.
+
 ## Documentation
 
 - [Design Decisions](docs/DECISIONS.md)
