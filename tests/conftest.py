@@ -7,10 +7,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Use SQLite for unit tests — no Postgres dependency required
+# Use SQLite for local/unit tests — no Postgres dependency required. CI sets
+# TEST_DATABASE_URL per step when it needs PostgreSQL integration coverage.
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite:///./test_pb1.db")
 
-os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# Configure application settings before importing the app. Respect an explicit
+# DATABASE_URL (used when integration tests select PostgreSQL).
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 os.environ["SECRET_KEY"] = "test-secret-key-not-for-production"
 
 from app.database import Base, get_db  # noqa: E402
