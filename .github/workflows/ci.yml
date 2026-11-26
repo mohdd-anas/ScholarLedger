@@ -176,7 +176,7 @@ jobs:
     name: Staging deploy and DAST
     runs-on: self-hosted
     needs: build-scan-sign
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
     environment:
       name: staging
       url: ${{ vars.STAGING_URL }}
