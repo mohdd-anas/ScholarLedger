@@ -176,7 +176,7 @@ jobs:
     name: Staging deploy and DAST
     runs-on: self-hosted
     needs: build-scan-sign
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    if: vars.ENABLE_DEPLOYMENTS == 'true' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     environment:
       name: staging
       url: ${{ vars.STAGING_URL }}
@@ -226,7 +226,7 @@ jobs:
     name: Production deploy
     runs-on: self-hosted
     needs: [build-scan-sign, staging]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: vars.ENABLE_DEPLOYMENTS == 'true' && github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
@@ -268,7 +268,7 @@ jobs:
     name: Rollback production
     runs-on: self-hosted
     needs: production
-    if: always() && needs.production.result == 'failure'
+    if: vars.ENABLE_DEPLOYMENTS == 'true' && always() && needs.production.result == 'failure'
     environment: production
     permissions:
       contents: read
