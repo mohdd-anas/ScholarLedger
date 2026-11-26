@@ -1,11 +1,19 @@
 """Alembic environment configuration."""
 
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+
+# Add project root to Python import path
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 config = context.config
 
@@ -18,13 +26,6 @@ if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
 # Import models so autogenerate can detect them
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 from app.database import Base  # noqa: E402
 from app.models import *  # noqa: E402, F401, F403
 
@@ -61,4 +62,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-
