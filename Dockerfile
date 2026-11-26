@@ -23,6 +23,7 @@ FROM python:3.12-slim AS runtime
 # Apply current Debian security updates to the runtime OS packages.
 RUN apt-get update \
     && apt-get upgrade -y \
+    && apt-get purge -y python3-setuptools \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
