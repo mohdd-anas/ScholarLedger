@@ -6,6 +6,7 @@
     <h1>Publication Details</h1>
     <div class="flex gap-1">
         <a href="/publications" class="btn">← Back</a>
+        <a href="/publications/{{ publication.id }}/proof" class="btn btn-primary">⬇ Download Proof (PDF)</a>
         {% if can_manage %}
         <a href="/publications/{{ publication.id }}/edit" class="btn">Edit</a>
         {% endif %}

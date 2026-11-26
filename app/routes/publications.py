@@ -2,7 +2,7 @@
 
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
@@ -30,6 +30,7 @@ from app.services.ingestion.openalex import (
 )
 from app.services.ingestion.scholar_import import parse_bibtex, parse_csv_export
 from app.services.matching import normalize_doi
+from app.services.proof_service import build_publication_proof_pdf
 from app.services.sync_service import ingest_works_for_faculty
 
 router = APIRouter(prefix="/publications", tags=["publications"])
@@ -379,6 +380,26 @@ async def view_publication(
             "available_coauthors": available_coauthors,
             "flash_messages": _get_flashes(request),
         },
+    )
+
+
+@router.get("/{pub_id}/proof")
+async def download_publication_proof(
+    pub_id: int,
+    db: Session = Depends(get_db),
+    user: Faculty = Depends(get_current_user),
+):
+    """Download a PDF verification proof for a publication record."""
+    pub = _get_publication_or_404(db, pub_id)
+    if user.role == FacultyRole.FACULTY and not pub.is_attributed_to(user.id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    pdf_bytes = build_publication_proof_pdf(pub)
+    filename = f"scholarledger_publication_{pub.id}_proof.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

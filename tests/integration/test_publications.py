@@ -155,3 +155,85 @@ class TestPublicationRoutes:
         assert claim_resp.status_code == 302
         db_session.refresh(pub)
         assert pub.coauthor_ids == [coauthor.id]
+
+    def test_download_publication_proof_pdf(self, client, db_session):
+        owner = Faculty(
+            name="Proof Owner",
+            email="proof.owner@university.edu",
+            department="Computer Science",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        coauthor = Faculty(
+            name="Proof Coauthor",
+            email="proof.coauthor@university.edu",
+            department="Physics",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        outsider = Faculty(
+            name="Outsider Prof",
+            email="outsider.prof@university.edu",
+            department="Chemistry",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        db_session.add_all([owner, coauthor, outsider])
+        db_session.flush()
+
+        pub = Publication(
+            title="MXene–Transition Metal Piezoelectric Nanogenerators",
+            authors="Owner, P.; Coauthor, P.",
+            venue="ACS Applied Electronic Materials",
+            year=2026,
+            doi="10.1021/acsaelm.6c01064",
+            department="Computer Science",
+            owner_faculty_id=owner.id,
+        )
+        pub.coauthors.append(coauthor)
+        db_session.add(pub)
+        db_session.flush()
+
+        # Owner can download PDF proof and detail page shows button
+        client.post(
+            "/login",
+            data={"email": "proof.owner@university.edu", "password": "password123!"},
+            follow_redirects=False,
+        )
+        detail = client.get(f"/publications/{pub.id}")
+        assert detail.status_code == 200
+        assert f"/publications/{pub.id}/proof" in detail.text
+        assert "Download Proof (PDF)" in detail.text
+
+        proof_resp = client.get(f"/publications/{pub.id}/proof")
+        assert proof_resp.status_code == 200
+        assert proof_resp.headers["content-type"] == "application/pdf"
+        assert (
+            f"scholarledger_publication_{pub.id}_proof.pdf"
+            in proof_resp.headers["content-disposition"]
+        )
+        assert proof_resp.content.startswith(b"%PDF-1.4")
+        assert b"%%EOF" in proof_resp.content
+        assert b"10.1021/acsaelm.6c01064" in proof_resp.content
+        assert b"Proof Coauthor" in proof_resp.content
+
+        # Co-author can also download the proof
+        client.post("/logout", follow_redirects=False)
+        client.post(
+            "/login",
+            data={"email": "proof.coauthor@university.edu", "password": "password123!"},
+            follow_redirects=False,
+        )
+        co_resp = client.get(f"/publications/{pub.id}/proof")
+        assert co_resp.status_code == 200
+        assert co_resp.content.startswith(b"%PDF-1.4")
+
+        # Unrelated faculty cannot download
+        client.post("/logout", follow_redirects=False)
+        client.post(
+            "/login",
+            data={"email": "outsider.prof@university.edu", "password": "password123!"},
+            follow_redirects=False,
+        )
+        denied_resp = client.get(f"/publications/{pub.id}/proof")
+        assert denied_resp.status_code == 403
