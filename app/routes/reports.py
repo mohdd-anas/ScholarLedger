@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
@@ -14,6 +14,7 @@ from app.main import templates
 from app.models.faculty import Faculty
 from app.models.publication import Publication
 from app.models.sync_run import SyncRun, SyncStatus
+from app.services.coauthor_service import department_publication_filter
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -33,7 +34,7 @@ async def reports_dashboard(
     """Department-wise reports: counts by year, type, department."""
     query = db.query(Publication)
     if department:
-        query = query.filter(Publication.department == department)
+        query = query.filter(department_publication_filter(department))
     if year:
         query = query.filter(Publication.year == int(year))
 
@@ -111,9 +112,12 @@ async def export_csv(
     year: str = "",
 ):
     """Export publications as CSV."""
-    query = db.query(Publication).join(Faculty, Publication.owner_faculty_id == Faculty.id)
+    query = db.query(Publication).options(
+        selectinload(Publication.owner),
+        selectinload(Publication.coauthors),
+    )
     if department:
-        query = query.filter(Publication.department == department)
+        query = query.filter(department_publication_filter(department))
     if year:
         query = query.filter(Publication.year == int(year))
 
@@ -123,16 +127,16 @@ async def export_csv(
     writer = csv.writer(output)
     writer.writerow([
         "ID", "Title", "Authors", "Venue", "Year", "DOI",
-        "Type", "Department", "Status", "Source", "Owner", "Confidence",
+        "Type", "Department", "Status", "Source", "Owner", "Co-Authors", "Confidence",
     ])
 
     for pub in publications:
-        owner = db.get(Faculty, pub.owner_faculty_id)
+        coauthor_names = "; ".join(c.name for c in pub.coauthors)
         writer.writerow([
             pub.id, pub.title, pub.authors, pub.venue or "", pub.year or "",
             pub.doi or "", pub.pub_type.value, pub.department or "",
             pub.status.value, pub.source.value,
-            owner.name if owner else "", pub.match_confidence or "",
+            pub.owner.name if pub.owner else "", coauthor_names, pub.match_confidence or "",
         ])
 
     output.seek(0)

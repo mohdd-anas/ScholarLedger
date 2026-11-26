@@ -3,10 +3,29 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+publication_coauthor = Table(
+    "publication_coauthor",
+    Base.metadata,
+    Column("publication_id", ForeignKey("publication.id", ondelete="CASCADE"), primary_key=True),
+    Column("faculty_id", ForeignKey("faculty.id", ondelete="CASCADE"), primary_key=True),
+    Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+)
 
 
 class PublicationStatus(str, enum.Enum):
@@ -71,7 +90,24 @@ class Publication(Base):
     )
 
     owner = relationship("Faculty", back_populates="publications")
+    coauthors = relationship(
+        "Faculty",
+        secondary=publication_coauthor,
+        back_populates="coauthored_publications",
+        order_by="Faculty.name",
+    )
     match_decisions = relationship("MatchDecision", back_populates="publication")
+
+    @property
+    def coauthor_ids(self) -> list[int]:
+        """Return IDs of faculty members attributed as co-authors."""
+        return [fac.id for fac in self.coauthors]
+
+    def is_attributed_to(self, faculty_id: int) -> bool:
+        """Return True if the faculty member owns or co-authors this publication."""
+        return self.owner_faculty_id == faculty_id or any(
+            fac.id == faculty_id for fac in self.coauthors
+        )
 
     def __repr__(self) -> str:
         title_short = self.title[:50] if self.title else ""

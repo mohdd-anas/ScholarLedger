@@ -8,6 +8,7 @@ from app.models.publication import (
     PublicationSource,
     PublicationStatus,
     PublicationType,
+    publication_coauthor,
 )
 from app.models.sync_run import SyncRun, SyncStatus
 
@@ -24,5 +25,6 @@ __all__ = [
     "PublicationType",
     "SyncRun",
     "SyncStatus",
+    "publication_coauthor",
 ]
 

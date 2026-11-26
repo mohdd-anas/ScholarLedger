@@ -52,6 +52,20 @@
             <input type="text" id="department" name="department"
                    value="{{ publication.department or '' if publication else '' }}">
         </div>
+        {% if faculty_list %}
+        <div class="form-group">
+            <label for="coauthor_ids">University Co-Authors (optional)</label>
+            <input type="hidden" name="_coauthors_submitted" value="1">
+            <select id="coauthor_ids" name="coauthor_ids" multiple size="4">
+                {% for fac in faculty_list %}
+                <option value="{{ fac.id }}" {% if publication and fac.id in publication.coauthor_ids %}selected{% endif %}>
+                    {{ fac.name }} ({{ fac.department }})
+                </option>
+                {% endfor %}
+            </select>
+            <small class="text-muted">Hold Ctrl (or Cmd) to select multiple internal co-authors.</small>
+        </div>
+        {% endif %}
         <div class="flex gap-1 mt-2">
             <button type="submit" class="btn btn-primary">{{ 'Update' if publication else 'Create' }} Publication</button>
             <a href="/publications" class="btn">Cancel</a>

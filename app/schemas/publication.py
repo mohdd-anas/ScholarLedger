@@ -42,6 +42,7 @@ class PublicationRead(BaseModel):
     status: str
     source: str
     owner_faculty_id: int
+    coauthor_ids: list[int] = Field(default_factory=list)
     match_confidence: float | None
 
     model_config = {"from_attributes": True}

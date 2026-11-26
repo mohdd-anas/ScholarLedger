@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth.dependencies import get_current_user
 from app.auth.security import generate_api_key
@@ -12,6 +12,7 @@ from app.models.api_key import ApiKey
 from app.models.faculty import Faculty, FacultyRole
 from app.models.publication import Publication
 from app.schemas.publication import PublicationRead
+from app.services.coauthor_service import attributed_to_faculty_filter
 
 router = APIRouter(tags=["api-keys"])
 
@@ -124,7 +125,7 @@ async def api_list_publications(
     user: Faculty = Depends(get_current_user),
 ):
     """Programmatic JSON endpoint for publications (supports X-API-Key)."""
-    query = db.query(Publication)
+    query = db.query(Publication).options(selectinload(Publication.coauthors))
     if user.role == FacultyRole.FACULTY:
-        query = query.filter(Publication.owner_faculty_id == user.id)
+        query = query.filter(attributed_to_faculty_filter(user.id))
     return query.order_by(Publication.created_at.desc()).all()

@@ -39,6 +39,11 @@ class Faculty(Base):
     )
 
     publications = relationship("Publication", back_populates="owner")
+    coauthored_publications = relationship(
+        "Publication",
+        secondary="publication_coauthor",
+        back_populates="coauthors",
+    )
 
     def __repr__(self) -> str:
         return f"<Faculty {self.name} ({self.email})>"

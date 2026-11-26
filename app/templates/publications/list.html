@@ -56,7 +56,14 @@
     <tbody>
         {% for pub in publications %}
         <tr>
-            <td><a href="/publications/{{ pub.id }}">{{ pub.title[:80] }}{% if pub.title|length > 80 %}...{% endif %}</a></td>
+            <td>
+                <a href="/publications/{{ pub.id }}">{{ pub.title[:80] }}{% if pub.title|length > 80 %}...{% endif %}</a>
+                {% if pub.owner_faculty_id != user.id and user.id in pub.coauthor_ids %}
+                <span class="badge badge-submitted" style="margin-left:0.35rem;">Co-author</span>
+                {% elif pub.coauthors %}
+                <span class="text-muted" style="font-size:0.75rem; margin-left:0.35rem;">(+{{ pub.coauthors|length }} co-author{{ 's' if pub.coauthors|length != 1 else '' }})</span>
+                {% endif %}
+            </td>
             <td>{{ pub.authors[:40] }}{% if pub.authors|length > 40 %}...{% endif %}</td>
             <td>{{ pub.year or '—' }}</td>
             <td>{{ pub.source.value }}</td>
@@ -64,11 +71,13 @@
             <td>
                 <div class="flex gap-1">
                     <a href="/publications/{{ pub.id }}" class="btn btn-sm">View</a>
+                    {% if user.id == pub.owner_faculty_id or user.role.value == 'admin' %}
                     <a href="/publications/{{ pub.id }}/edit" class="btn btn-sm">Edit</a>
                     {% if pub.status.value == 'draft' %}
                     <form method="post" action="/publications/{{ pub.id }}/submit" style="display:inline;">
                         <button type="submit" class="btn btn-sm btn-primary">Submit</button>
                     </form>
+                    {% endif %}
                     {% endif %}
                 </div>
             </td>

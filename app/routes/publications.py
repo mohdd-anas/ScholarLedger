@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
@@ -16,6 +16,12 @@ from app.models.publication import (
     PublicationStatus,
     PublicationType,
 )
+from app.services.coauthor_service import (
+    attribute_coauthor,
+    attributed_to_faculty_filter,
+    department_publication_filter,
+    sync_coauthors,
+)
 from app.services.ingestion.openalex import (
     fetch_work_by_doi,
     fetch_works_by_orcid,
@@ -23,6 +29,7 @@ from app.services.ingestion.openalex import (
     search_works_by_author,
 )
 from app.services.ingestion.scholar_import import parse_bibtex, parse_csv_export
+from app.services.matching import normalize_doi
 from app.services.sync_service import ingest_works_for_faculty
 
 router = APIRouter(prefix="/publications", tags=["publications"])
@@ -38,6 +45,24 @@ def _get_flashes(request: Request) -> list:
     return request.session.pop("flash_messages", [])
 
 
+def _can_manage_publication(pub: Publication, user: Faculty) -> bool:
+    """Return True if the user owns the publication or is an admin."""
+    return user.role == FacultyRole.ADMIN or pub.owner_faculty_id == user.id
+
+
+def _get_publication_or_404(db: Session, pub_id: int) -> Publication:
+    """Fetch a publication with owner and co-authors, or raise 404."""
+    pub = (
+        db.query(Publication)
+        .options(selectinload(Publication.owner), selectinload(Publication.coauthors))
+        .filter(Publication.id == pub_id)
+        .first()
+    )
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    return pub
+
+
 @router.get("", response_class=HTMLResponse)
 async def list_publications(
     request: Request,
@@ -50,11 +75,14 @@ async def list_publications(
 ):
     """List publications with search, filter, and pagination."""
     per_page = 20
-    query = db.query(Publication)
+    query = db.query(Publication).options(
+        selectinload(Publication.owner),
+        selectinload(Publication.coauthors),
+    )
 
-    # Faculty sees only their own; admin/viewer sees all
+    # Faculty sees owned and co-authored; admin/viewer sees all
     if user.role == FacultyRole.FACULTY:
-        query = query.filter(Publication.owner_faculty_id == user.id)
+        query = query.filter(attributed_to_faculty_filter(user.id))
 
     if search:
         query = query.filter(
@@ -67,7 +95,7 @@ async def list_publications(
     if status_filter:
         query = query.filter(Publication.status == status_filter)
     if department:
-        query = query.filter(Publication.department == department)
+        query = query.filter(department_publication_filter(department))
 
     total = query.count()
     publications = (
@@ -252,6 +280,12 @@ async def new_publication(
     user: Faculty = Depends(get_current_user),
 ):
     """Show form for creating a new publication."""
+    faculty_list = (
+        db.query(Faculty)
+        .filter(Faculty.id != user.id)
+        .order_by(Faculty.name)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "publications/form.html",
@@ -259,6 +293,7 @@ async def new_publication(
             "user": user,
             "publication": None,
             "pub_types": PublicationType,
+            "faculty_list": faculty_list,
             "flash_messages": _get_flashes(request),
         },
     )
@@ -270,13 +305,29 @@ async def create_publication(
     db: Session = Depends(get_db),
     user: Faculty = Depends(get_current_user),
 ):
-    """Create a new publication."""
+    """Create a new publication or link the user as a co-author on an existing DOI."""
     form = await request.form()
 
-    doi = form.get("doi", "").strip().lower() or None
-    if doi and db.query(Publication).filter(Publication.doi == doi).first():
-        _flash(request, "error", f"A publication with DOI {doi} already exists.")
-        return RedirectResponse(url="/publications/new", status_code=302)
+    doi = normalize_doi(form.get("doi", ""))
+    if doi:
+        existing = db.query(Publication).filter(Publication.doi == doi).first()
+        if existing:
+            if existing.is_attributed_to(user.id):
+                _flash(
+                    request,
+                    "info",
+                    f"You are already attributed to the publication with DOI {doi}.",
+                )
+            else:
+                attribute_coauthor(existing, user)
+                db.commit()
+                _flash(
+                    request,
+                    "success",
+                    f"Publication with DOI {doi} already exists. "
+                    "You have been linked as a co-author.",
+                )
+            return RedirectResponse(url=f"/publications/{existing.id}", status_code=302)
 
     pub = Publication(
         title=form.get("title", "").strip(),
@@ -291,6 +342,8 @@ async def create_publication(
         owner_faculty_id=user.id,
     )
     db.add(pub)
+    db.flush()
+    sync_coauthors(db, pub, form.getlist("coauthor_ids"))
     db.commit()
     _flash(request, "success", "Publication created successfully.")
     return RedirectResponse(url="/publications", status_code=302)
@@ -304,20 +357,26 @@ async def view_publication(
     user: Faculty = Depends(get_current_user),
 ):
     """View a single publication."""
-    pub = db.get(Publication, pub_id)
-    if not pub:
-        raise HTTPException(status_code=404, detail="Publication not found")
-    if user.role == FacultyRole.FACULTY and pub.owner_faculty_id != user.id:
+    pub = _get_publication_or_404(db, pub_id)
+    if user.role == FacultyRole.FACULTY and not pub.is_attributed_to(user.id):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    owner = db.get(Faculty, pub.owner_faculty_id)
+    excluded_ids = {pub.owner_faculty_id, *pub.coauthor_ids}
+    available_coauthors = (
+        db.query(Faculty)
+        .filter(Faculty.id.notin_(excluded_ids))
+        .order_by(Faculty.name)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "publications/detail.html",
         {
             "user": user,
             "publication": pub,
-            "owner": owner,
+            "owner": pub.owner,
+            "can_manage": _can_manage_publication(pub, user),
+            "available_coauthors": available_coauthors,
             "flash_messages": _get_flashes(request),
         },
     )
@@ -331,12 +390,16 @@ async def edit_publication_page(
     user: Faculty = Depends(get_current_user),
 ):
     """Show edit form for a publication."""
-    pub = db.get(Publication, pub_id)
-    if not pub:
-        raise HTTPException(status_code=404, detail="Publication not found")
-    if user.role == FacultyRole.FACULTY and pub.owner_faculty_id != user.id:
+    pub = _get_publication_or_404(db, pub_id)
+    if not _can_manage_publication(pub, user):
         raise HTTPException(status_code=403, detail="Access denied")
 
+    faculty_list = (
+        db.query(Faculty)
+        .filter(Faculty.id != pub.owner_faculty_id)
+        .order_by(Faculty.name)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "publications/form.html",
@@ -344,6 +407,7 @@ async def edit_publication_page(
             "user": user,
             "publication": pub,
             "pub_types": PublicationType,
+            "faculty_list": faculty_list,
             "flash_messages": _get_flashes(request),
         },
     )
@@ -357,10 +421,8 @@ async def edit_publication(
     user: Faculty = Depends(get_current_user),
 ):
     """Update a publication."""
-    pub = db.get(Publication, pub_id)
-    if not pub:
-        raise HTTPException(status_code=404, detail="Publication not found")
-    if user.role == FacultyRole.FACULTY and pub.owner_faculty_id != user.id:
+    pub = _get_publication_or_404(db, pub_id)
+    if not _can_manage_publication(pub, user):
         raise HTTPException(status_code=403, detail="Access denied")
 
     form = await request.form()
@@ -368,7 +430,7 @@ async def edit_publication(
     pub.authors = form.get("authors", pub.authors).strip()
     pub.venue = form.get("venue", "").strip() or None
     pub.year = int(form.get("year")) if form.get("year") else None
-    new_doi = form.get("doi", "").strip().lower() or None
+    new_doi = normalize_doi(form.get("doi", ""))
     if new_doi and new_doi != pub.doi:
         existing = db.query(Publication).filter(Publication.doi == new_doi).first()
         if existing and existing.id != pub.id:
@@ -377,9 +439,74 @@ async def edit_publication(
     pub.doi = new_doi
     pub.pub_type = form.get("pub_type", pub.pub_type)
     pub.department = form.get("department", "").strip() or pub.department
+    if form.get("_coauthors_submitted") or "coauthor_ids" in form:
+        sync_coauthors(db, pub, form.getlist("coauthor_ids"))
 
     db.commit()
     _flash(request, "success", "Publication updated successfully.")
+    return RedirectResponse(url=f"/publications/{pub_id}", status_code=302)
+
+
+@router.post("/{pub_id}/coauthors/add")
+async def add_coauthor(
+    pub_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: Faculty = Depends(get_current_user),
+):
+    """Attach an internal faculty co-author to a publication."""
+    pub = _get_publication_or_404(db, pub_id)
+    if not _can_manage_publication(pub, user):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    form = await request.form()
+    raw_faculty_id = form.get("faculty_id", "").strip()
+    try:
+        target_id = int(raw_faculty_id)
+    except ValueError:
+        _flash(request, "error", "Please select a valid faculty member.")
+        return RedirectResponse(url=f"/publications/{pub_id}", status_code=302)
+
+    target = db.get(Faculty, target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Faculty member not found")
+
+    if attribute_coauthor(pub, target):
+        db.commit()
+        _flash(request, "success", f"Added {target.name} as a co-author.")
+    else:
+        _flash(request, "info", f"{target.name} is already attributed to this publication.")
+    return RedirectResponse(url=f"/publications/{pub_id}", status_code=302)
+
+
+@router.post("/{pub_id}/coauthors/{faculty_id}/remove")
+async def remove_coauthor(
+    pub_id: int,
+    faculty_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: Faculty = Depends(get_current_user),
+):
+    """Remove an internal faculty co-author (by owner, admin, or the co-author themselves)."""
+    pub = _get_publication_or_404(db, pub_id)
+    if not (_can_manage_publication(pub, user) or user.id == faculty_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    target = next((fac for fac in pub.coauthors if fac.id == faculty_id), None)
+    if not target:
+        _flash(request, "warning", "Co-author link not found.")
+        return RedirectResponse(url=f"/publications/{pub_id}", status_code=302)
+
+    pub.coauthors.remove(target)
+    db.commit()
+    _flash(request, "success", f"Removed {target.name} from co-authors.")
+
+    if (
+        user.role == FacultyRole.FACULTY
+        and user.id == faculty_id
+        and pub.owner_faculty_id != user.id
+    ):
+        return RedirectResponse(url="/publications", status_code=302)
     return RedirectResponse(url=f"/publications/{pub_id}", status_code=302)
 
 
@@ -391,10 +518,8 @@ async def submit_publication(
     user: Faculty = Depends(get_current_user),
 ):
     """Submit a draft publication for verification."""
-    pub = db.get(Publication, pub_id)
-    if not pub:
-        raise HTTPException(status_code=404, detail="Publication not found")
-    if user.role == FacultyRole.FACULTY and pub.owner_faculty_id != user.id:
+    pub = _get_publication_or_404(db, pub_id)
+    if not _can_manage_publication(pub, user):
         raise HTTPException(status_code=403, detail="Access denied")
     if pub.status != PublicationStatus.DRAFT:
         _flash(request, "warning", "Only draft publications can be submitted.")

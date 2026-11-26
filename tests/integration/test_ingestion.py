@@ -80,6 +80,60 @@ class TestScholarImportAndSync:
         assert len(stored) == 1
         assert stored[0].doi == "10.1145/sec.2024.1"
 
+    def test_ingest_shared_doi_attributes_coauthor(self, db_session):
+        fac_a = Faculty(
+            name="Dr. First Author",
+            email="first.shared@university.edu",
+            department="CS",
+            orcid_id="0000-0001-1111-2222",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        fac_b = Faculty(
+            name="Dr. Second Author",
+            email="second.shared@university.edu",
+            department="ECE",
+            orcid_id="0000-0002-3333-4444",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        db_session.add_all([fac_a, fac_b])
+        db_session.flush()
+
+        shared_work = [
+            {
+                "title": "Cross-Departmental ML Systems",
+                "authors": "First Author; Second Author",
+                "year": 2025,
+                "doi": "https://doi.org/10.1145/shared.2025.1",
+                "type": "conference-paper",
+                "source": "openalex",
+            }
+        ]
+        ingest_works_for_faculty(db_session, fac_a, shared_work, "openalex")
+        fetched, merged, queued = ingest_works_for_faculty(
+            db_session, fac_b, shared_work, "openalex"
+        )
+        assert fetched == 1
+        assert merged == 1
+        assert queued == 0
+
+        pubs = db_session.query(Publication).filter(
+            Publication.doi == "10.1145/shared.2025.1"
+        ).all()
+        assert len(pubs) == 1
+        assert pubs[0].owner_faculty_id == fac_a.id
+        assert pubs[0].coauthor_ids == [fac_b.id]
+        assert pubs[0].is_attributed_to(fac_b.id)
+
+        # Re-syncing for the co-author remains idempotent
+        _, merged_again, queued_again = ingest_works_for_faculty(
+            db_session, fac_b, shared_work, "openalex"
+        )
+        assert merged_again == 1
+        assert queued_again == 0
+        assert pubs[0].coauthor_ids == [fac_b.id]
+
     def test_metrics_and_csv_export(self, client, db_session):
         viewer = Faculty(
             name="IQAC Viewer",

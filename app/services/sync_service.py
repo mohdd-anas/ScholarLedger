@@ -14,6 +14,7 @@ from app.models.publication import (
     PublicationType,
 )
 from app.models.sync_run import SyncRun, SyncStatus
+from app.services.coauthor_service import attribute_coauthor, attributed_to_faculty_filter
 from app.services.dedup import deduplicate_works
 from app.services.ingestion import crossref, openalex, orcid
 from app.services.matching import find_best_match, normalize_doi
@@ -53,9 +54,11 @@ def ingest_works_for_faculty(
     """
     fetched = len(works)
     deduped = deduplicate_works(works)
-    existing = db.query(Publication).filter(
-        Publication.owner_faculty_id == faculty.id
-    ).all()
+    existing = (
+        db.query(Publication)
+        .filter(attributed_to_faculty_filter(faculty.id))
+        .all()
+    )
 
     merged = 0
     queued = 0
@@ -71,12 +74,19 @@ def ingest_works_for_faculty(
             merged += 1
             continue
 
-        # Create new publication record
+        # Create new publication record or attribute co-author on existing DOI
         doi = normalize_doi(work.get("doi"))
-        if doi and db.query(Publication).filter(Publication.doi == doi).first():
-            # Already exists globally (e.g. co-author); count as merged
-            merged += 1
-            continue
+        if doi:
+            existing_global = (
+                db.query(Publication).filter(Publication.doi == doi).first()
+            )
+            if existing_global is not None:
+                # Shared publication (e.g. co-author at same institution)
+                if attribute_coauthor(existing_global, faculty):
+                    db.flush()
+                    existing.append(existing_global)
+                merged += 1
+                continue
 
         needs_review = matched_id is not None or score > 0.0
         pub = Publication(

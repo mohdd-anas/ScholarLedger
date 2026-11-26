@@ -6,7 +6,9 @@
     <h1>Publication Details</h1>
     <div class="flex gap-1">
         <a href="/publications" class="btn">← Back</a>
+        {% if can_manage %}
         <a href="/publications/{{ publication.id }}/edit" class="btn">Edit</a>
+        {% endif %}
     </div>
 </div>
 
@@ -26,6 +28,38 @@
         <tr><th>Type</th><td>{{ publication.pub_type.value }}</td></tr>
         <tr><th>Department</th><td>{{ publication.department or '—' }}</td></tr>
         <tr><th>Owner</th><td>{{ owner.name }} ({{ owner.email }})</td></tr>
+        <tr>
+            <th>University Co-Authors</th>
+            <td>
+                {% if publication.coauthors %}
+                <ul style="list-style:none; padding:0; margin:0;">
+                    {% for coauthor in publication.coauthors %}
+                    <li class="flex items-center gap-1" style="margin-bottom:0.25rem;">
+                        <span>{{ coauthor.name }} ({{ coauthor.department }} · {{ coauthor.email }})</span>
+                        {% if can_manage or user.id == coauthor.id %}
+                        <form method="post" action="/publications/{{ publication.id }}/coauthors/{{ coauthor.id }}/remove" style="display:inline;">
+                            <button type="submit" class="btn btn-sm">{{ 'Leave' if user.id == coauthor.id and not can_manage else 'Remove' }}</button>
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                —
+                {% endif %}
+                {% if can_manage and available_coauthors %}
+                <form method="post" action="/publications/{{ publication.id }}/coauthors/add" class="flex gap-1 items-center mt-1" style="flex-wrap:wrap;">
+                    <select name="faculty_id" required style="width:auto; min-width:220px;">
+                        <option value="">Select faculty co-author...</option>
+                        {% for fac in available_coauthors %}
+                        <option value="{{ fac.id }}">{{ fac.name }} ({{ fac.department }})</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-primary">+ Link Co-Author</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
         {% if publication.match_confidence is not none %}
         <tr><th>Match Confidence</th><td>{{ "%.1f"|format(publication.match_confidence * 100) }}%</td></tr>
         {% endif %}

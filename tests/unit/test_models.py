@@ -90,6 +90,37 @@ class TestPublicationModel:
         assert pub.status == PublicationStatus.DRAFT
         assert pub.source == PublicationSource.ORCID
 
+    def test_publication_coauthors(self, db_session):
+        owner = Faculty(
+            name="Dr. Owner",
+            email="owner.co@university.edu",
+            department="CS",
+            password_hash="hash",
+        )
+        coauthor = Faculty(
+            name="Dr. Coauthor",
+            email="coauthor.co@university.edu",
+            department="ECE",
+            password_hash="hash",
+        )
+        db_session.add_all([owner, coauthor])
+        db_session.flush()
+
+        pub = Publication(
+            title="Shared Paper",
+            authors="Owner, D.; Coauthor, D.",
+            owner_faculty_id=owner.id,
+            source=PublicationSource.MANUAL,
+        )
+        pub.coauthors.append(coauthor)
+        db_session.add(pub)
+        db_session.flush()
+
+        assert pub.coauthor_ids == [coauthor.id]
+        assert pub.is_attributed_to(owner.id) is True
+        assert pub.is_attributed_to(coauthor.id) is True
+        assert pub in coauthor.coauthored_publications
+
     def test_publication_status_values(self):
         assert PublicationStatus.DRAFT.value == "draft"
         assert PublicationStatus.SUBMITTED.value == "submitted"
