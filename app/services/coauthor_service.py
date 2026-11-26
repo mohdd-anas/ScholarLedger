@@ -23,6 +23,22 @@ def department_publication_filter(department: str):
     )
 
 
+def university_publication_filter(university: str):
+    """Return a filter matching publications for a university via pub, owner, or co-authors."""
+    return or_(
+        Publication.university == university,
+        Publication.owner.has(Faculty.university == university),
+        Publication.coauthors.any(Faculty.university == university),
+    )
+
+
+def get_distinct_universities(db: Session) -> list[str]:
+    """Return sorted distinct non-empty university names across publications and faculty."""
+    pub_unis = {r[0] for r in db.query(Publication.university).distinct().all() if r[0]}
+    fac_unis = {r[0] for r in db.query(Faculty.university).distinct().all() if r[0]}
+    return sorted(pub_unis | fac_unis)
+
+
 def attribute_coauthor(publication: Publication, faculty: Faculty) -> bool:
     """Link a faculty member as an internal co-author if not already attributed."""
     if publication.is_attributed_to(faculty.id):

@@ -26,6 +26,7 @@ class Faculty(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     department: Mapped[str] = mapped_column(String(255), nullable=False)
+    university: Mapped[str | None] = mapped_column(String(255), nullable=True)
     orcid_id: Mapped[str | None] = mapped_column(String(19), unique=True, nullable=True)
     role: Mapped[FacultyRole] = mapped_column(
         Enum(FacultyRole, native_enum=False), default=FacultyRole.FACULTY

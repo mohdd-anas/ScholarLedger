@@ -97,6 +97,7 @@ def ingest_works_for_faculty(
             doi=doi,
             pub_type=_parse_pub_type(work.get("type")),
             department=faculty.department,
+            university=work.get("university") or faculty.university,
             status=PublicationStatus.SUBMITTED if needs_review else PublicationStatus.DRAFT,
             source=_parse_source(work.get("source") or source_name),
             owner_faculty_id=faculty.id,

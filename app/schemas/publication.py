@@ -13,6 +13,7 @@ class PublicationCreate(BaseModel):
     doi: str | None = None
     pub_type: str = "other"
     department: str | None = None
+    university: str | None = None
 
 
 class PublicationUpdate(BaseModel):
@@ -25,6 +26,7 @@ class PublicationUpdate(BaseModel):
     doi: str | None = None
     pub_type: str | None = None
     department: str | None = None
+    university: str | None = None
     status: str | None = None
 
 
@@ -39,6 +41,7 @@ class PublicationRead(BaseModel):
     doi: str | None
     pub_type: str
     department: str | None
+    university: str | None = None
     status: str
     source: str
     owner_faculty_id: int

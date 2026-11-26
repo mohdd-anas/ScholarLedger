@@ -28,6 +28,7 @@
         <tr><th>DOI</th><td>{% if publication.doi %}<a href="https://doi.org/{{ publication.doi }}" target="_blank">{{ publication.doi }}</a>{% else %}—{% endif %}</td></tr>
         <tr><th>Type</th><td>{{ publication.pub_type.value }}</td></tr>
         <tr><th>Department</th><td>{{ publication.department or '—' }}</td></tr>
+        <tr><th>University</th><td>{{ publication.university or owner.university or '—' }}</td></tr>
         <tr><th>Owner</th><td>{{ owner.name }} ({{ owner.email }})</td></tr>
         <tr>
             <th>University Co-Authors</th>

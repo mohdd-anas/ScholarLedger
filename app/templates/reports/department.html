@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Publication Reports</h1>
-    <a href="/reports/export/csv?department={{ department }}&year={{ year }}" class="btn btn-primary">📥 Export CSV</a>
+    <a href="/reports/export/csv?department={{ department }}&university={{ university }}&year={{ year }}" class="btn btn-primary">📥 Export CSV</a>
 </div>
 
 <!-- Filters -->
@@ -15,6 +15,14 @@
                 <option value="">All Departments</option>
                 {% for dept in departments %}
                 <option value="{{ dept }}" {% if department == dept %}selected{% endif %}>{{ dept }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <select name="university">
+                <option value="">All Universities</option>
+                {% for uni in universities %}
+                <option value="{{ uni }}" {% if university == uni %}selected{% endif %}>{{ uni }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -59,6 +67,21 @@
         <tbody>
         {% for dept, count in by_department.items()|sort(attribute='1', reverse=true) %}
             <tr><td>{{ dept }}</td><td>{{ count }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- By University -->
+{% if by_university %}
+<div class="card mb-2">
+    <h2 class="card-title">By University</h2>
+    <table>
+        <thead><tr><th>University</th><th>Count</th></tr></thead>
+        <tbody>
+        {% for uni, count in by_university.items()|sort(attribute='1', reverse=true) %}
+            <tr><td>{{ uni }}</td><td>{{ count }}</td></tr>
         {% endfor %}
         </tbody>
     </table>

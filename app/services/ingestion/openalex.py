@@ -47,11 +47,16 @@ def _parse_openalex_work(work: dict) -> dict | None:
         venue = source_obj.get("display_name") or ""
 
     author_names = []
+    institutions: list[str] = []
     for authorship in work.get("authorships") or []:
         author_obj = authorship.get("author") or {}
         display_name = author_obj.get("display_name")
         if display_name:
             author_names.append(display_name)
+        for inst in authorship.get("institutions") or []:
+            inst_name = (inst.get("display_name") or "").strip()
+            if inst_name and inst_name not in institutions:
+                institutions.append(inst_name)
     authors = "; ".join(author_names)
 
     pub_type = _TYPE_MAP.get(work.get("type") or "other", "other")
@@ -62,10 +67,33 @@ def _parse_openalex_work(work: dict) -> dict | None:
         "year": year,
         "venue": venue,
         "authors": authors,
+        "institutions": institutions,
         "type": pub_type,
         "source": "openalex",
         "openalex_id": work.get("id", ""),
     }
+
+
+async def resolve_institution_ids(
+    client: httpx.AsyncClient,
+    base: str,
+    university: str,
+) -> list[str]:
+    """Resolve OpenAlex institution IDs matching a university/institution name."""
+    clean = university.strip()
+    if not clean:
+        return []
+    resp = await client.get(
+        f"{base}/institutions",
+        params={"search": clean, "per_page": 5, **_base_params()},
+    )
+    resp.raise_for_status()
+    results = resp.json().get("results", [])
+    return [
+        inst["id"].replace("https://openalex.org/", "")
+        for inst in results
+        if inst.get("id")
+    ]
 
 
 async def fetch_works_by_orcid(orcid_id: str) -> list[dict]:
@@ -107,19 +135,35 @@ async def fetch_works_by_orcid(orcid_id: str) -> list[dict]:
     return works
 
 
-async def search_works(query: str, per_page: int = 20) -> list[dict]:
-    """Search OpenAlex works by free-text query (title, author, or topic)."""
-    if not query.strip():
+async def search_works(
+    query: str,
+    per_page: int = 20,
+    university: str = "",
+) -> list[dict]:
+    """Search OpenAlex works by free-text query and/or university affiliation."""
+    clean_query = query.strip()
+    clean_uni = university.strip()
+    if not clean_query and not clean_uni:
         return []
     settings = get_settings()
     base = settings.OPENALEX_API_BASE
-    params = {
-        "search": query.strip(),
-        "per_page": min(max(per_page, 1), 50),
-        **_base_params(),
-    }
 
     async with httpx.AsyncClient(timeout=30) as client:
+        params: dict = {
+            "per_page": min(max(per_page, 1), 50),
+            **_base_params(),
+        }
+        if clean_query:
+            params["search"] = clean_query
+        if clean_uni:
+            inst_ids = await resolve_institution_ids(client, base, clean_uni)
+            if not inst_ids:
+                logger.info("openalex_institution_not_found", university=clean_uni)
+                return []
+            params["filter"] = f"authorships.institutions.id:{'|'.join(inst_ids)}"
+            if not clean_query:
+                params["sort"] = "publication_year:desc"
+
         resp = await client.get(f"{base}/works", params=params)
         resp.raise_for_status()
         data = resp.json()
@@ -129,36 +173,61 @@ async def search_works(query: str, per_page: int = 20) -> list[dict]:
         for work in data.get("results", [])
         if (parsed := _parse_openalex_work(work)) is not None
     ]
-    logger.info("openalex_search_complete", query=query, works_count=len(works))
+    logger.info(
+        "openalex_search_complete",
+        query=query,
+        university=clean_uni,
+        works_count=len(works),
+    )
     return works
 
 
-async def search_works_by_author(author_name: str, per_page: int = 20) -> list[dict]:
-    """Search OpenAlex works authored by someone matching author_name."""
-    if not author_name.strip():
+async def search_works_by_author(
+    author_name: str,
+    per_page: int = 20,
+    university: str = "",
+) -> list[dict]:
+    """Search OpenAlex works by author name, optionally scoped to a university."""
+    clean_author = author_name.strip()
+    clean_uni = university.strip()
+    if not clean_author:
         return []
     settings = get_settings()
     base = settings.OPENALEX_API_BASE
 
     async with httpx.AsyncClient(timeout=30) as client:
-        author_resp = await client.get(
-            f"{base}/authors",
-            params={"search": author_name.strip(), "per_page": 3, **_base_params()},
-        )
+        inst_ids: list[str] = []
+        author_params: dict = {"search": clean_author, "per_page": 3, **_base_params()}
+        if clean_uni:
+            inst_ids = await resolve_institution_ids(client, base, clean_uni)
+            if not inst_ids:
+                logger.info("openalex_institution_not_found", university=clean_uni)
+                return []
+            author_params["filter"] = f"affiliations.institution.id:{'|'.join(inst_ids)}"
+
+        author_resp = await client.get(f"{base}/authors", params=author_params)
         author_resp.raise_for_status()
         authors = author_resp.json().get("results", [])
         if not authors:
-            logger.info("openalex_author_not_found", author_name=author_name)
+            logger.info(
+                "openalex_author_not_found",
+                author_name=author_name,
+                university=clean_uni,
+            )
             return []
 
         author_ids = [a["id"].replace("https://openalex.org/", "") for a in authors if a.get("id")]
         if not author_ids:
             return []
 
+        work_filters = [f"author.id:{'|'.join(author_ids)}"]
+        if inst_ids:
+            work_filters.append(f"authorships.institutions.id:{'|'.join(inst_ids)}")
+
         works_resp = await client.get(
             f"{base}/works",
             params={
-                "filter": f"author.id:{'|'.join(author_ids)}",
+                "filter": ",".join(work_filters),
                 "per_page": min(max(per_page, 1), 50),
                 "sort": "publication_year:desc",
                 **_base_params(),
@@ -172,7 +241,12 @@ async def search_works_by_author(author_name: str, per_page: int = 20) -> list[d
         for work in data.get("results", [])
         if (parsed := _parse_openalex_work(work)) is not None
     ]
-    logger.info("openalex_author_search_complete", author_name=author_name, works_count=len(works))
+    logger.info(
+        "openalex_author_search_complete",
+        author_name=author_name,
+        university=clean_uni,
+        works_count=len(works),
+    )
     return works
 
 

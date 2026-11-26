@@ -47,6 +47,7 @@ def compute_proof_digest(pub: Publication) -> str:
         "doi": pub.doi or "",
         "pub_type": pub.pub_type.value,
         "department": pub.department or "",
+        "university": pub.university or "",
         "status": pub.status.value,
         "source": pub.source.value,
         "owner_faculty_id": pub.owner_faculty_id,
@@ -92,6 +93,7 @@ def build_publication_proof_pdf(pub: Publication) -> bytes:
         ("DOI", f"https://doi.org/{pub.doi}" if pub.doi else "—"),
         ("Type", pub.pub_type.value),
         ("Department", pub.department or "—"),
+        ("University", pub.university or (pub.owner.university if pub.owner else None) or "—"),
         ("Owner", owner_str),
         ("University Co-Authors", coauthors_str),
         (

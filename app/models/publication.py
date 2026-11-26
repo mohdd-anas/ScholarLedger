@@ -74,6 +74,7 @@ class Publication(Base):
         Enum(PublicationType, native_enum=False), default=PublicationType.OTHER
     )
     department: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    university: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[PublicationStatus] = mapped_column(
         Enum(PublicationStatus, native_enum=False), default=PublicationStatus.DRAFT
     )

@@ -20,7 +20,9 @@ from app.services.coauthor_service import (
     attribute_coauthor,
     attributed_to_faculty_filter,
     department_publication_filter,
+    get_distinct_universities,
     sync_coauthors,
+    university_publication_filter,
 )
 from app.services.ingestion.openalex import (
     fetch_work_by_doi,
@@ -72,6 +74,7 @@ async def list_publications(
     search: str = "",
     status_filter: str = "",
     department: str = "",
+    university: str = "",
     page: int = 1,
 ):
     """List publications with search, filter, and pagination."""
@@ -97,6 +100,8 @@ async def list_publications(
         query = query.filter(Publication.status == status_filter)
     if department:
         query = query.filter(department_publication_filter(department))
+    if university:
+        query = query.filter(university_publication_filter(university))
 
     total = query.count()
     publications = (
@@ -106,12 +111,13 @@ async def list_publications(
         .all()
     )
 
-    # Get unique departments for filter dropdown
+    # Get unique departments and universities for filter dropdowns
     departments = [
         r[0]
         for r in db.query(Publication.department).distinct().all()
         if r[0]
     ]
+    universities = get_distinct_universities(db)
 
     return templates.TemplateResponse(
         request,
@@ -123,6 +129,8 @@ async def list_publications(
             "status_filter": status_filter,
             "department": department,
             "departments": departments,
+            "university": university,
+            "universities": universities,
             "page": page,
             "total": total,
             "per_page": per_page,
@@ -137,21 +145,25 @@ async def openalex_search_page(
     request: Request,
     q: str = "",
     search_type: str = "title",
+    university: str = "",
     user: Faculty = Depends(get_current_user),
 ):
-    """Search OpenAlex works by title, author name, or DOI."""
+    """Search OpenAlex works by title, author name, DOI, and/or university."""
     results = []
     error = None
     query = q.strip()
-    if query:
+    uni_filter = university.strip()
+    if query or uni_filter:
         try:
-            if search_type == "doi" or query.startswith("10.") or "doi.org/" in query:
+            if query and (search_type == "doi" or query.startswith("10.") or "doi.org/" in query):
                 work = await fetch_work_by_doi(query)
                 results = [work] if work else []
-            elif search_type == "author":
-                results = await search_works_by_author(query, per_page=20)
+            elif query and search_type == "author":
+                results = await search_works_by_author(
+                    query, per_page=20, university=uni_filter
+                )
             else:
-                results = await search_works(query, per_page=20)
+                results = await search_works(query, per_page=20, university=uni_filter)
         except Exception as exc:
             error = f"OpenAlex lookup failed: {exc}"
 
@@ -162,6 +174,7 @@ async def openalex_search_page(
             "user": user,
             "query": query,
             "search_type": search_type,
+            "university": uni_filter,
             "results": results,
             "error": error,
             "flash_messages": _get_flashes(request),
@@ -178,6 +191,7 @@ async def openalex_import_work(
     """Import a single OpenAlex search result into the user's publications."""
     form = await request.form()
     year_val = form.get("year", "").strip()
+    university_val = form.get("university", "").strip() or user.university
     work = {
         "title": form.get("title", "").strip(),
         "authors": form.get("authors", "").strip() or user.name,
@@ -185,6 +199,7 @@ async def openalex_import_work(
         "year": int(year_val) if year_val.isdigit() else None,
         "doi": form.get("doi", "").strip() or None,
         "type": form.get("pub_type", "other"),
+        "university": university_val,
         "source": "openalex",
     }
     if not work["title"]:
@@ -338,6 +353,7 @@ async def create_publication(
         doi=doi,
         pub_type=form.get("pub_type", "other"),
         department=form.get("department", "").strip() or user.department,
+        university=form.get("university", "").strip() or user.university,
         status=PublicationStatus.DRAFT,
         source=PublicationSource.MANUAL,
         owner_faculty_id=user.id,
@@ -460,6 +476,8 @@ async def edit_publication(
     pub.doi = new_doi
     pub.pub_type = form.get("pub_type", pub.pub_type)
     pub.department = form.get("department", "").strip() or pub.department
+    if "university" in form:
+        pub.university = form.get("university", "").strip() or None
     if form.get("_coauthors_submitted") or "coauthor_ids" in form:
         sync_coauthors(db, pub, form.getlist("coauthor_ids"))
 

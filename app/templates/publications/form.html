@@ -52,6 +52,12 @@
             <input type="text" id="department" name="department"
                    value="{{ publication.department or '' if publication else '' }}">
         </div>
+        <div class="form-group">
+            <label for="university">University / Institution</label>
+            <input type="text" id="university" name="university"
+                   placeholder="e.g. UPES"
+                   value="{{ publication.university or '' if publication else (user.university or '') }}">
+        </div>
         {% if faculty_list %}
         <div class="form-group">
             <label for="coauthor_ids">University Co-Authors (optional)</label>

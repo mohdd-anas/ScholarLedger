@@ -14,7 +14,11 @@ from app.main import templates
 from app.models.faculty import Faculty
 from app.models.publication import Publication
 from app.models.sync_run import SyncRun, SyncStatus
-from app.services.coauthor_service import department_publication_filter
+from app.services.coauthor_service import (
+    department_publication_filter,
+    get_distinct_universities,
+    university_publication_filter,
+)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -29,12 +33,15 @@ async def reports_dashboard(
     db: Session = Depends(get_db),
     user: Faculty = Depends(get_current_user),
     department: str = "",
+    university: str = "",
     year: str = "",
 ):
-    """Department-wise reports: counts by year, type, department."""
-    query = db.query(Publication)
+    """Department and university reports: counts by year, type, department, university."""
+    query = db.query(Publication).options(selectinload(Publication.owner))
     if department:
         query = query.filter(department_publication_filter(department))
+    if university:
+        query = query.filter(university_publication_filter(university))
     if year:
         query = query.filter(Publication.year == int(year))
 
@@ -45,6 +52,7 @@ async def reports_dashboard(
     by_status = defaultdict(int)
     by_type = defaultdict(int)
     by_department = defaultdict(int)
+    by_university = defaultdict(int)
     by_year = defaultdict(int)
     by_source = defaultdict(int)
 
@@ -53,6 +61,9 @@ async def reports_dashboard(
         by_type[pub.pub_type.value] += 1
         if pub.department:
             by_department[pub.department] += 1
+        pub_uni = pub.university or (pub.owner.university if pub.owner else None)
+        if pub_uni:
+            by_university[pub_uni] += 1
         if pub.year:
             by_year[pub.year] += 1
         by_source[pub.source.value] += 1
@@ -61,6 +72,7 @@ async def reports_dashboard(
     departments = [
         r[0] for r in db.query(Publication.department).distinct().all() if r[0]
     ]
+    universities = get_distinct_universities(db)
     years = sorted(
         [r[0] for r in db.query(Publication.year).distinct().all() if r[0]],
         reverse=True,
@@ -89,12 +101,15 @@ async def reports_dashboard(
             "by_status": dict(by_status),
             "by_type": dict(by_type),
             "by_department": dict(by_department),
+            "by_university": dict(by_university),
             "by_year": dict(by_year),
             "by_source": dict(by_source),
             "source_coverage": source_coverage,
             "departments": departments,
+            "universities": universities,
             "years": years,
             "department": department,
+            "university": university,
             "year": year,
             "sync_runs": sync_runs,
             "sync_reliability": sync_reliability,
@@ -109,6 +124,7 @@ async def export_csv(
     db: Session = Depends(get_db),
     user: Faculty = Depends(get_current_user),
     department: str = "",
+    university: str = "",
     year: str = "",
 ):
     """Export publications as CSV."""
@@ -118,6 +134,8 @@ async def export_csv(
     )
     if department:
         query = query.filter(department_publication_filter(department))
+    if university:
+        query = query.filter(university_publication_filter(university))
     if year:
         query = query.filter(Publication.year == int(year))
 
@@ -127,15 +145,17 @@ async def export_csv(
     writer = csv.writer(output)
     writer.writerow([
         "ID", "Title", "Authors", "Venue", "Year", "DOI",
-        "Type", "Department", "Status", "Source", "Owner", "Co-Authors", "Confidence",
+        "Type", "Department", "University", "Status", "Source",
+        "Owner", "Co-Authors", "Confidence",
     ])
 
     for pub in publications:
         coauthor_names = "; ".join(c.name for c in pub.coauthors)
+        pub_uni = pub.university or (pub.owner.university if pub.owner else "") or ""
         writer.writerow([
             pub.id, pub.title, pub.authors, pub.venue or "", pub.year or "",
             pub.doi or "", pub.pub_type.value, pub.department or "",
-            pub.status.value, pub.source.value,
+            pub_uni, pub.status.value, pub.source.value,
             pub.owner.name if pub.owner else "", coauthor_names, pub.match_confidence or "",
         ])
 

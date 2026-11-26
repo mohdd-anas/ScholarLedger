@@ -22,6 +22,7 @@ class TestAuthIntegration:
                 "name": "Test User",
                 "email": "test@university.edu",
                 "department": "CS",
+                "university": "UPES",
                 "password": "password123!",
                 "confirm_password": "password123!",
             },
@@ -33,6 +34,7 @@ class TestAuthIntegration:
         user = db_session.query(Faculty).filter(Faculty.email == "test@university.edu").first()
         assert user is not None
         assert user.name == "Test User"
+        assert user.university == "UPES"
 
     def test_login_invalid_credentials(self, client):
         response = client.post(

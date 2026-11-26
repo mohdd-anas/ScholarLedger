@@ -26,9 +26,12 @@
             <option value="author" {% if search_type == 'author' %}selected{% endif %}>Author Name</option>
             <option value="doi" {% if search_type == 'doi' %}selected{% endif %}>DOI</option>
         </select>
-        <input type="text" name="q" value="{{ query }}" required
-               placeholder="Enter paper title, author name (e.g. Riya), or DOI..."
-               style="flex:1; min-width:220px; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius);">
+        <input type="text" name="q" value="{{ query }}"
+               placeholder="Enter paper title, author name, or DOI..."
+               style="flex:2; min-width:200px; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius);">
+        <input type="text" name="university" value="{{ university or '' }}"
+               placeholder="Filter by University (e.g. UPES, MIT)..."
+               style="flex:1; min-width:180px; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius);">
         <button type="submit" class="btn btn-primary">Search OpenAlex</button>
     </form>
 </div>
@@ -38,12 +41,13 @@
 {% endif %}
 
 {% if results %}
-<p class="text-muted mb-1">Found {{ results|length }} work(s) on OpenAlex</p>
+<p class="text-muted mb-1">Found {{ results|length }} work(s) on OpenAlex{% if university %} for "{{ university }}"{% endif %}</p>
 <table>
     <thead>
         <tr>
             <th>Title</th>
             <th>Authors</th>
+            <th>Institutions</th>
             <th>Year</th>
             <th>Venue</th>
             <th>DOI</th>
@@ -55,6 +59,7 @@
         <tr>
             <td>{{ w.title[:80] }}{% if w.title|length > 80 %}...{% endif %}</td>
             <td>{{ w.authors[:40] }}{% if w.authors|length > 40 %}...{% endif %}</td>
+            <td>{{ w.institutions[:2]|join(', ') if w.institutions else '—' }}</td>
             <td>{{ w.year or '—' }}</td>
             <td>{{ w.venue[:30] if w.venue else '—' }}</td>
             <td>{{ w.doi or '—' }}</td>
@@ -66,6 +71,7 @@
                     <input type="hidden" name="year" value="{{ w.year or '' }}">
                     <input type="hidden" name="doi" value="{{ w.doi or '' }}">
                     <input type="hidden" name="pub_type" value="{{ w.type }}">
+                    <input type="hidden" name="university" value="{{ university or (w.institutions[0] if w.institutions else '') }}">
                     <button type="submit" class="btn btn-sm btn-primary">+ Import</button>
                 </form>
             </td>
@@ -73,9 +79,9 @@
         {% endfor %}
     </tbody>
 </table>
-{% elif query %}
+{% elif query or university %}
 <div class="card text-center">
-    <p class="text-muted">No works found on OpenAlex for "{{ query }}".</p>
+    <p class="text-muted">No works found on OpenAlex{% if query %} for "{{ query }}"{% endif %}{% if university %} at "{{ university }}"{% endif %}.</p>
 </div>
 {% endif %}
 {% endblock %}

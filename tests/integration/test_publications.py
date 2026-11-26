@@ -237,3 +237,61 @@ class TestPublicationRoutes:
         )
         denied_resp = client.get(f"/publications/{pub.id}/proof")
         assert denied_resp.status_code == 403
+
+    def test_university_filter_on_publications_and_reports(self, client, db_session):
+        admin = Faculty(
+            name="Admin Uni",
+            email="admin.uni@university.edu",
+            department="Administration",
+            university="UPES",
+            role=FacultyRole.ADMIN,
+            password_hash=hash_password("admin123!"),
+        )
+        fac_other = Faculty(
+            name="Other Uni Prof",
+            email="other.uni@university.edu",
+            department="Computer Science",
+            university="IIT Delhi",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        db_session.add_all([admin, fac_other])
+        db_session.flush()
+
+        pub_upes = Publication(
+            title="UPES Cloud Security Paper",
+            authors="Admin Uni",
+            department="Administration",
+            university="UPES",
+            owner_faculty_id=admin.id,
+        )
+        pub_iit = Publication(
+            title="IIT Delhi Robotics Paper",
+            authors="Other Uni Prof",
+            department="Computer Science",
+            university="IIT Delhi",
+            owner_faculty_id=fac_other.id,
+        )
+        db_session.add_all([pub_upes, pub_iit])
+        db_session.flush()
+
+        client.post(
+            "/login",
+            data={"email": "admin.uni@university.edu", "password": "admin123!"},
+            follow_redirects=False,
+        )
+
+        list_upes = client.get("/publications?university=UPES")
+        assert list_upes.status_code == 200
+        assert "UPES Cloud Security Paper" in list_upes.text
+        assert "IIT Delhi Robotics Paper" not in list_upes.text
+
+        report_iit = client.get("/reports?university=IIT+Delhi")
+        assert report_iit.status_code == 200
+        assert "IIT Delhi" in report_iit.text
+
+        csv_upes = client.get("/reports/export/csv?university=UPES")
+        assert csv_upes.status_code == 200
+        assert "University" in csv_upes.text
+        assert "UPES Cloud Security Paper" in csv_upes.text
+        assert "IIT Delhi Robotics Paper" not in csv_upes.text

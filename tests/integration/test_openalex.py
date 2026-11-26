@@ -12,6 +12,7 @@ from app.services.ingestion.openalex import (
     fetch_work_by_doi,
     fetch_works_by_orcid,
     search_works,
+    search_works_by_author,
 )
 
 
@@ -173,3 +174,112 @@ class TestOpenAlexClientAndRoutes:
         )
         assert stored is not None
         assert stored.doi == "10.1145/icse.2024.99"
+
+    @pytest.mark.anyio
+    async def test_search_works_by_author_with_university_filter(self):
+        seen_urls: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen_urls.append(str(request.url))
+            if "/institutions" in request.url.path:
+                return httpx.Response(
+                    200,
+                    json={
+                        "results": [
+                            {
+                                "id": "https://openalex.org/I9999",
+                                "display_name": "UPES",
+                            }
+                        ]
+                    },
+                )
+            if "/authors" in request.url.path:
+                return httpx.Response(
+                    200,
+                    json={"results": [{"id": "https://openalex.org/A555"}]},
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "id": "https://openalex.org/W777",
+                            "title": "University Scoped Paper",
+                            "doi": "https://doi.org/10.1000/upes.1",
+                            "publication_year": 2025,
+                            "type": "journal-article",
+                            "primary_location": {"source": {"display_name": "IEEE Access"}},
+                            "authorships": [
+                                {
+                                    "author": {"display_name": "Hitesh Kumar Sharma"},
+                                    "institutions": [{"display_name": "UPES"}],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+
+        transport = httpx.MockTransport(handler)
+        orig_client = httpx.AsyncClient
+
+        with patch(
+            "app.services.ingestion.openalex.httpx.AsyncClient",
+            side_effect=lambda **kw: orig_client(transport=transport, **kw),
+        ):
+            works = await search_works_by_author(
+                "Hitesh Kumar Sharma", university="UPES"
+            )
+
+        assert len(works) == 1
+        assert works[0]["title"] == "University Scoped Paper"
+        assert works[0]["institutions"] == ["UPES"]
+        assert any("/institutions" in u and "search=UPES" in u for u in seen_urls)
+        assert any(
+            "/authors" in u and "affiliations.institution.id" in u and "I9999" in u
+            for u in seen_urls
+        )
+        assert any(
+            "/works" in u and "authorships.institutions.id" in u and "I9999" in u
+            for u in seen_urls
+        )
+
+    def test_openalex_route_passes_university_filter(self, client, db_session):
+        fac = Faculty(
+            name="Uni Searcher",
+            email="uni.search@university.edu",
+            department="CS",
+            university="UPES",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        db_session.add(fac)
+        db_session.flush()
+        client.post(
+            "/login",
+            data={"email": "uni.search@university.edu", "password": "password123!"},
+            follow_redirects=False,
+        )
+
+        mock_works = [
+            {
+                "title": "UPES Filtered Paper",
+                "authors": "Hitesh Kumar Sharma",
+                "institutions": ["UPES"],
+                "venue": "IEEE",
+                "year": 2025,
+                "doi": "10.1000/upes.2",
+                "type": "journal-article",
+                "source": "openalex",
+            }
+        ]
+        with patch(
+            "app.routes.publications.search_works_by_author",
+            new=AsyncMock(return_value=mock_works),
+        ) as mock_fn:
+            res = client.get(
+                "/publications/openalex?q=Hitesh&search_type=author&university=UPES"
+            )
+            assert res.status_code == 200
+            assert "UPES Filtered Paper" in res.text
+            mock_fn.assert_awaited_once_with("Hitesh", per_page=20, university="UPES")
