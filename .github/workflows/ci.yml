@@ -63,13 +63,13 @@ jobs:
       - run: pytest tests/unit -v --tb=short
       - name: Integration tests
         env:
-          TEST_DATABASE_URL: postgresql+psycopg2://pb1:pb1secret@localhost:5432/pb1_test
-          DATABASE_URL: postgresql+psycopg2://pb1:pb1secret@localhost:5432/pb1_test
+          TEST_DATABASE_URL: postgresql+psycopg://pb1:pb1secret@localhost:5432/pb1_test
+          DATABASE_URL: postgresql+psycopg://pb1:pb1secret@localhost:5432/pb1_test
         run: pytest tests/integration -v --tb=short
       - name: Run full suite with coverage
         env:
-          TEST_DATABASE_URL: postgresql+psycopg2://pb1:pb1secret@localhost:5432/pb1_test
-          DATABASE_URL: postgresql+psycopg2://pb1:pb1secret@localhost:5432/pb1_test
+          TEST_DATABASE_URL: postgresql+psycopg://pb1:pb1secret@localhost:5432/pb1_test
+          DATABASE_URL: postgresql+psycopg://pb1:pb1secret@localhost:5432/pb1_test
         run: |
           pytest --cov=app --cov-report=xml --cov-report=term-missing -v
           coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
