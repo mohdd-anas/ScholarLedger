@@ -34,10 +34,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Packaging tools are only needed in the builder. Remove setuptools from the
-# runtime image so its vulnerable build-time copy cannot ship with the app.
-RUN rm -rf /usr/local/lib/python3.12/site-packages/setuptools \
-    /usr/local/lib/python3.12/site-packages/setuptools-*.dist-info
+# Keep setuptools at a patched version in the final image. Trivy scans the
+# runtime image, so upgrading only in the builder stage is not sufficient.
+RUN python -m pip install --no-cache-dir --upgrade "setuptools>=78.1.1"
 
 # Copy application code
 COPY --chown=appuser:appuser app/ ./app/
