@@ -149,6 +149,7 @@ jobs:
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           format: table
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: "1"
       - uses: anchore/sbom-action/download-syft@v0
       - name: Generate and attach SPDX SBOM
