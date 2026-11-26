@@ -9,6 +9,9 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir ".[dev]" 2>/dev/null || pip install --no-cache-dir .
+# Ensure the runtime site-packages do not retain the vulnerable setuptools
+# version supplied by the base image or a package build dependency.
+RUN pip install --no-cache-dir --upgrade "setuptools>=78.1.1"
 
 COPY . .
 
@@ -16,6 +19,11 @@ COPY . .
 # Stage 2: Runtime (non-root)
 # ==============================
 FROM python:3.12-slim AS runtime
+
+# Apply current Debian security updates to the runtime OS packages.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
