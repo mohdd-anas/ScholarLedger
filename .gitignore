@@ -46,3 +46,5 @@ Thumbs.db
 # Alembic
 alembic/versions/*.pyc
 
+trivy-report.json
+

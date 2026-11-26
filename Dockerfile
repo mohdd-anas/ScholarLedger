@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir ".[dev]" 2>/dev/null || pip install --no-cache-di
 # version supplied by the base image or a package build dependency.
 RUN pip install --no-cache-dir --upgrade "setuptools>=78.1.1"
 
+# Remove setuptools from builder to avoid carrying stale package metadata
+RUN pip uninstall -y setuptools
+
 COPY . .
 
 # ==============================
@@ -30,6 +33,8 @@ RUN apt-get update \
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
 
 WORKDIR /app
+
+ENV PYTHONPATH=/app
 
 # Copy installed packages from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages

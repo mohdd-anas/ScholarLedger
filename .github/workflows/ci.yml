@@ -141,16 +141,16 @@ jobs:
           context: .
           push: true
           pull: true
+          no-cache: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
       - uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           format: table
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          skip-files: /usr/local/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json
           exit-code: "1"
       - uses: anchore/sbom-action/download-syft@v0
       - name: Generate and attach SPDX SBOM
