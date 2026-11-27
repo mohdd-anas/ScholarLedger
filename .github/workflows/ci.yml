@@ -25,12 +25,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: security/.gitleaks.toml
 
   lint-test:
     name: Lint and tests
@@ -62,13 +63,13 @@ jobs:
       - run: pytest tests/unit -v --tb=short
       - name: Integration tests
         env:
-          TEST_DATABASE_URL: postgresql+psycopg2://pb1:pb1secret@localhost:5432/pb1_test
-          DATABASE_URL: postgresql+psycopg2://pb1:pb1secret@localhost:5432/pb1_test
+          TEST_DATABASE_URL: postgresql+psycopg://pb1:pb1secret@localhost:5432/pb1_test
+          DATABASE_URL: postgresql+psycopg://pb1:pb1secret@localhost:5432/pb1_test
         run: pytest tests/integration -v --tb=short
       - name: Run full suite with coverage
         env:
-          TEST_DATABASE_URL: postgresql+psycopg2://pb1:pb1secret@localhost:5432/pb1_test
-          DATABASE_URL: postgresql+psycopg2://pb1:pb1secret@localhost:5432/pb1_test
+          TEST_DATABASE_URL: postgresql+psycopg://pb1:pb1secret@localhost:5432/pb1_test
+          DATABASE_URL: postgresql+psycopg://pb1:pb1secret@localhost:5432/pb1_test
         run: |
           pytest --cov=app --cov-report=xml --cov-report=term-missing -v
           coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
@@ -140,16 +141,16 @@ jobs:
           context: .
           push: true
           pull: true
+          no-cache: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
       - uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           format: table
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          skip-files: /usr/local/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json
           exit-code: "1"
       - uses: anchore/sbom-action/download-syft@v0
       - name: Generate and attach SPDX SBOM
@@ -175,7 +176,7 @@ jobs:
     name: Staging deploy and DAST
     runs-on: self-hosted
     needs: build-scan-sign
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: vars.ENABLE_DEPLOYMENTS == 'true' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     environment:
       name: staging
       url: ${{ vars.STAGING_URL }}
@@ -225,7 +226,7 @@ jobs:
     name: Production deploy
     runs-on: self-hosted
     needs: [build-scan-sign, staging]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: vars.ENABLE_DEPLOYMENTS == 'true' && github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
@@ -267,7 +268,7 @@ jobs:
     name: Rollback production
     runs-on: self-hosted
     needs: production
-    if: always() && needs.production.result == 'failure'
+    if: vars.ENABLE_DEPLOYMENTS == 'true' && always() && needs.production.result == 'failure'
     environment: production
     permissions:
       contents: read

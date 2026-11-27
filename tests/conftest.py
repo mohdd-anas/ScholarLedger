@@ -31,6 +31,7 @@ def engine():
     Base.metadata.create_all(bind=eng)
     yield eng
     Base.metadata.drop_all(bind=eng)
+    eng.dispose()
     if os.path.exists("./test_pb1.db"):
         os.remove("./test_pb1.db")
 
