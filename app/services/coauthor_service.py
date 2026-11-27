@@ -1,6 +1,8 @@
 """Shared helpers for internal faculty co-author attribution and queries."""
 
-from sqlalchemy import or_
+import re
+
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.faculty import Faculty
@@ -72,3 +74,38 @@ def sync_coauthors(
         .order_by(Faculty.name)
         .all()
     )
+
+
+def find_faculty_by_input(db: Session, raw_query: str) -> Faculty | None:
+    """Resolve a typed name, email, or 'Name (email)' string to a registered Faculty."""
+    query = raw_query.strip()
+    if not query:
+        return None
+
+    email_match = re.search(r"\(([^()]+@[^()]+)\)$", query)
+    if email_match:
+        email = email_match.group(1).strip().lower()
+        fac = db.query(Faculty).filter(func.lower(Faculty.email) == email).first()
+        if fac:
+            return fac
+
+    fac_by_email = db.query(Faculty).filter(func.lower(Faculty.email) == query.lower()).first()
+    if fac_by_email:
+        return fac_by_email
+
+    return db.query(Faculty).filter(func.lower(Faculty.name) == query.lower()).first()
+
+
+def append_author_name(publication: Publication, author_name: str) -> bool:
+    """Append an author name to Publication.authors if not already listed."""
+    clean = author_name.strip()
+    if not clean:
+        return False
+
+    existing_parts = [p.strip() for p in (publication.authors or "").split(";") if p.strip()]
+    if any(part.lower() == clean.lower() for part in existing_parts):
+        return False
+
+    existing_parts.append(clean)
+    publication.authors = "; ".join(existing_parts)
+    return True

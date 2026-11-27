@@ -17,9 +17,11 @@ from app.models.publication import (
     PublicationType,
 )
 from app.services.coauthor_service import (
+    append_author_name,
     attribute_coauthor,
     attributed_to_faculty_filter,
     department_publication_filter,
+    find_faculty_by_input,
     get_distinct_universities,
     sync_coauthors,
     university_publication_filter,
@@ -493,28 +495,43 @@ async def add_coauthor(
     db: Session = Depends(get_db),
     user: Faculty = Depends(get_current_user),
 ):
-    """Attach an internal faculty co-author to a publication."""
+    """Attach a registered faculty co-author or append a typed co-author name."""
     pub = _get_publication_or_404(db, pub_id)
     if not _can_manage_publication(pub, user):
         raise HTTPException(status_code=403, detail="Access denied")
 
     form = await request.form()
     raw_faculty_id = form.get("faculty_id", "").strip()
-    try:
-        target_id = int(raw_faculty_id)
-    except ValueError:
-        _flash(request, "error", "Please select a valid faculty member.")
+    coauthor_query = form.get("coauthor_query", "").strip()
+
+    target: Faculty | None = None
+    if raw_faculty_id:
+        try:
+            target_id = int(raw_faculty_id)
+        except ValueError:
+            _flash(request, "error", "Please select a valid faculty member.")
+            return RedirectResponse(url=f"/publications/{pub_id}", status_code=302)
+        target = db.get(Faculty, target_id)
+        if not target:
+            raise HTTPException(status_code=404, detail="Faculty member not found")
+    elif coauthor_query:
+        target = find_faculty_by_input(db, coauthor_query)
+    else:
+        _flash(request, "error", "Please enter or select a co-author name.")
         return RedirectResponse(url=f"/publications/{pub_id}", status_code=302)
 
-    target = db.get(Faculty, target_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Faculty member not found")
-
-    if attribute_coauthor(pub, target):
-        db.commit()
-        _flash(request, "success", f"Added {target.name} as a co-author.")
+    if target is not None:
+        if attribute_coauthor(pub, target):
+            db.commit()
+            _flash(request, "success", f"Linked {target.name} as a university co-author.")
+        else:
+            _flash(request, "info", f"{target.name} is already attributed to this publication.")
     else:
-        _flash(request, "info", f"{target.name} is already attributed to this publication.")
+        if append_author_name(pub, coauthor_query):
+            db.commit()
+            _flash(request, "success", f"Added '{coauthor_query}' to publication authors.")
+        else:
+            _flash(request, "info", f"'{coauthor_query}' is already listed in Authors.")
     return RedirectResponse(url=f"/publications/{pub_id}", status_code=302)
 
 

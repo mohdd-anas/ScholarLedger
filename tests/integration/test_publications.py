@@ -295,3 +295,65 @@ class TestPublicationRoutes:
         assert "University" in csv_upes.text
         assert "UPES Cloud Security Paper" in csv_upes.text
         assert "IIT Delhi Robotics Paper" not in csv_upes.text
+
+    def test_typeable_coauthor_input_links_faculty_or_adds_author(self, client, db_session):
+        owner = Faculty(
+            name="Owner Writer",
+            email="owner.writer@university.edu",
+            department="CS",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        colleague = Faculty(
+            name="Dr. Colleague",
+            email="colleague@university.edu",
+            department="CS",
+            role=FacultyRole.FACULTY,
+            password_hash=hash_password("password123!"),
+        )
+        db_session.add_all([owner, colleague])
+        db_session.flush()
+
+        pub = Publication(
+            title="Typed Coauthor Test Paper",
+            authors="Owner Writer",
+            department="CS",
+            owner_faculty_id=owner.id,
+        )
+        db_session.add(pub)
+        db_session.flush()
+
+        client.post(
+            "/login",
+            data={"email": "owner.writer@university.edu", "password": "password123!"},
+            follow_redirects=False,
+        )
+
+        # 1. Typing registered faculty via autocomplete format links their Faculty account
+        r1 = client.post(
+            f"/publications/{pub.id}/coauthors/add",
+            data={"coauthor_query": "Dr. Colleague (colleague@university.edu)"},
+            follow_redirects=False,
+        )
+        assert r1.status_code == 302
+        db_session.refresh(pub)
+        assert pub.coauthor_ids == [colleague.id]
+
+        # 2. Typing an unregistered co-author name appends it to Publication.authors
+        r2 = client.post(
+            f"/publications/{pub.id}/coauthors/add",
+            data={"coauthor_query": "Dr. Hitesh Kumar Sharma"},
+            follow_redirects=False,
+        )
+        assert r2.status_code == 302
+        db_session.refresh(pub)
+        assert "Dr. Hitesh Kumar Sharma" in pub.authors
+
+        # Duplicate typed name is not appended twice
+        client.post(
+            f"/publications/{pub.id}/coauthors/add",
+            data={"coauthor_query": "Dr. Hitesh Kumar Sharma"},
+            follow_redirects=False,
+        )
+        db_session.refresh(pub)
+        assert pub.authors.count("Dr. Hitesh Kumar Sharma") == 1
